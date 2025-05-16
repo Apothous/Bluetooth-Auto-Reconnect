@@ -1,7 +1,7 @@
 ﻿# Define the path to the CSV file where Bluetooth device information was saved
 $deviceFile = "C:\Bluetooth Auto Reconnect\Devices.csv"
 
-function Device-Status {
+function DeviceStatus {
     # Import the CSV and grab the DeviceName of the first entry
     $csvData = Import-Csv -Path $deviceFile
 
