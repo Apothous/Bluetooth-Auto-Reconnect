@@ -6,7 +6,7 @@
 #-------------------------------------------------------------------------------------------------------#
 
 #-------------------------------------------------------------------------------------------------------#
-# User Configuration
+# Static Global Variables
 #-------------------------------------------------------------------------------------------------------#
 
 # Define the path to the log file where script activity will be recorded
@@ -14,6 +14,17 @@ $logFile = Join-Path -Path $PSScriptRoot -ChildPath "LogFile.txt"
 
 # Define the path to the CSV file where Bluetooth device information will be saved
 $deviceFile = Join-Path -Path $PSScriptRoot -ChildPath "BTDevice.csv"
+
+#-------------------------------------------------------------------------------------------------------#
+# Function to log activity
+#-------------------------------------------------------------------------------------------------------#
+
+# Function to write messages to the log file with a timestamp
+function LogMessage {
+    param([string]$message)
+    $timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+    "$timestamp - $message" | Out-File -Append $logFile
+}
 
 #-------------------------------------------------------------------------------------------------------#
 # Function to retrieve all currently paired bluetooth devices and assign numeric IDs
@@ -73,18 +84,6 @@ function MatchUserInput {
     }
 }
 
-
-#-------------------------------------------------------------------------------------------------------#
-# Function to log activity
-#-------------------------------------------------------------------------------------------------------#
-
-# Function to write messages to the log file with a timestamp
-function LogMessage {
-    param([string]$message)
-    $timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
-    "$timestamp - $message" | Out-File -Append $logFile
-}
-
 #-------------------------------------------------------------------------------------------------------#
 # Function to save to CSV file
 #-------------------------------------------------------------------------------------------------------#
@@ -96,7 +95,7 @@ function SaveToCSV {
     $chosenDevice | Select-Object DeviceName, MACAddress | Export-Csv -Path $deviceFile -NoTypeInformation -Force
 
     # Log that device information was saved
-    Log-Message "New Bluetooth Device Information Saved to BTDevice.csv"
+    LogMessage "New Bluetooth Device Information Saved to BTDevice.csv"
 
     # Display a confirmation message to the user
     Write-Host ""
