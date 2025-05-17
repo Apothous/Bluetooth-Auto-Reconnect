@@ -24,7 +24,7 @@ $firstCheckInterval = 60
 $logFile = "C:\Bluetooth Auto Reconnect\LogFile.txt"
 
 # Define the path to the CSV file where Bluetooth device information will be saved
-$deviceFile = "C:\Bluetooth Auto Reconnect\Devices.csv"
+#$deviceFile = "C:\Bluetooth Auto Reconnect\Devices.csv"
 
 #-------------------------------------------------------------------------------------------------------#
 # Type Definition for Bluetooth Device Structure and Service Manager
@@ -60,7 +60,7 @@ if (-not ([System.Management.Automation.PSTypeName]'BLUETOOTH_DEVICE_INFO').Type
 #-------------------------------------------------------------------------------------------------------#
 # Logs a timestamped message to the log file
 #-------------------------------------------------------------------------------------------------------#
-function Log-Message {
+function LogMessage {
     param([string]$message)
     $timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
     "$timestamp - $message" | Out-File -Append $logFile
@@ -69,7 +69,7 @@ function Log-Message {
 #-------------------------------------------------------------------------------------------------------#
 # Converts a MAC address string (without colons) to a 64-bit unsigned integer
 #-------------------------------------------------------------------------------------------------------#
-function Convert-MacToULong {
+function ConvertMacToULong {
     param($mac)
     return [Convert]::ToUInt64($mac, 16)
 }
@@ -77,7 +77,7 @@ function Convert-MacToULong {
 #-------------------------------------------------------------------------------------------------------#
 # Function to check device status
 #-------------------------------------------------------------------------------------------------------#
-function Device-Status {
+function DeviceStatus {
     $nameToCheck = $friendlyName
     $statusOK = "OK"
     $foundAny = $false
@@ -119,7 +119,7 @@ function Device-Status {
 #-------------------------------------------------------------------------------------------------------#
 
 # Convert the MAC string to a 64-bit address as required by the Bluetooth API
-$btAddr = Convert-MacToULong $deviceMAC
+$btAddr = ConvertMacToULong $deviceMAC
 
 # Instantiate the Bluetooth device structure and populate its fields
 $info = New-Object "BLUETOOTH_DEVICE_INFO"

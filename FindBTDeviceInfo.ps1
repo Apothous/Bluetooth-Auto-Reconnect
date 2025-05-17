@@ -79,7 +79,7 @@ function MatchUserInput {
 #-------------------------------------------------------------------------------------------------------#
 
 # Function to write messages to the log file with a timestamp
-function Log-Message {
+function LogMessage {
     param([string]$message)
     $timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
     "$timestamp - $message" | Out-File -Append $logFile

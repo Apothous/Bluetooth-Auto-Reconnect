@@ -60,7 +60,7 @@ if (-not ([System.Management.Automation.PSTypeName]'BLUETOOTH_DEVICE_INFO').Type
 #-------------------------------------------------------------------------------------------------------#
 # Logs a timestamped message to the log file
 #-------------------------------------------------------------------------------------------------------#
-function Log-Message {
+function LogMessage {
     param([string]$message)
     $timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
     "$timestamp - $message" | Out-File -Append $logFile
@@ -77,7 +77,7 @@ function Convert-MacToULong {
 #-------------------------------------------------------------------------------------------------------#
 # Function to check device status
 #-------------------------------------------------------------------------------------------------------#
-function Device-Status {
+function DeviceStatus {
     # Import the CSV and grab the DeviceName of the first entry
     $csvData = Import-Csv -Path $deviceFile
 
