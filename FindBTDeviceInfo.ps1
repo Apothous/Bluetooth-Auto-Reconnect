@@ -10,10 +10,10 @@
 #-------------------------------------------------------------------------------------------------------#
 
 # Define the path to the log file where script activity will be recorded
-$logFile = "C:\Bluetooth Auto Reconnect\LogFile.txt"
+$logFile = Join-Path -Path $PSScriptRoot -ChildPath "LogFile.txt"
 
 # Define the path to the CSV file where Bluetooth device information will be saved
-$deviceFile = "C:\Bluetooth Auto Reconnect\Devices.csv"
+$deviceFile = Join-Path -Path $PSScriptRoot -ChildPath "Devices.csv"
 
 #-------------------------------------------------------------------------------------------------------#
 # Function to retrieve all currently paired bluetooth devices and assign numeric IDs

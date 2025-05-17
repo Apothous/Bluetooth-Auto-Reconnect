@@ -21,10 +21,10 @@ $interval = 30
 $firstCheckInterval = 60
 
 # File path where logs will be saved
-$logFile = "C:\Bluetooth Auto Reconnect\LogFile.txt"
+$logFile = Join-Path -Path $PSScriptRoot -ChildPath "LogFile.txt"
 
 # Define the path to the CSV file where Bluetooth device information will be saved
-$deviceFile = "C:\Bluetooth Auto Reconnect\Devices.csv"
+$deviceFile = Join-Path -Path $PSScriptRoot -ChildPath "Devices.csv"
 
 #-------------------------------------------------------------------------------------------------------#
 # Type Definition for Bluetooth Device Structure and Service Manager
