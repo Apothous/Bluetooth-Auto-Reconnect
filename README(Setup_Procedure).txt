@@ -8,28 +8,12 @@ Steps for setting up Bluetooth Auto Reconnect Script.
 
 2. Copy the Bluetooth Auto Reconnect folder from USB drive and paste it into the C:\ directory.
 
-3. Right click on the FindBTDeviceInfo.ps1 and select "Run With PowerShell" (If this option isn't available then search for PowerShell in the Windows Search bar and open it, once prompted run the following command: C:\Bluetooth Auto Reconnect\FindBTDeviceInfo.ps1
+3. Right click on the SetupScript.ps1 and select "Run With PowerShell" (If this option isn't available then search for PowerShell in the Windows Search bar and open it with administrator privileges, once prompted run the following command: C:\Bluetooth Auto Reconnect\SetupScript.ps1)
 	- This script will search the PC and list all the paired Bluetooth devices as well as create two files in the Bluetooth Auto Reconnect folder (If they don't already exist).
 		- Devices.csv [This file contains a list of the Names and Mac Address's for all paired Bluetooth devices]
 		- LogFile.txt [This file contains a timestamped log of all the actions taken by both scripts]
-
-4. Open the Devices.csv file to retrieve the Device Name and MAC Address for the desired device.
-
-5. After obtaining the desired device information, open the BluetoothAutoReconnect.ps1 script in a text editor and change the "friendlyName" and "deviceMAC" variables located at the top of the script to the desired device (Letters in MAC Address should all be capitalized and there should be no separating Colons).
-
---------------------------------
------ Setup Scheduled Task -----
---------------------------------
-
-1. Open Windows Search, search for Task Scheduler (taskschd.msc) and open it.
-
-2. In the left panel look for and click on "Import Task".
-
-3. Navigate to the C:\Bluetooth Auto Reconnect directory.
-
-4. Select the Bluetooth Auto Reconnect.xml file and click "Open".
-
-5. Click the "OK" button in the "Create Task" pop up window.
+	- Next it will prompt the user to choose a device from the list of paired Bluetooth devices and save the device info to the CSV file.
+	- It will then prompt the user to create a scheduled task to run the Bluetooth Auto Reconnect script.
 
 -------------------------------------------
 ----- Test that the script is working -----
