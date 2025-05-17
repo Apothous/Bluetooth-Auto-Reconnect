@@ -13,7 +13,7 @@
 $logFile = Join-Path -Path $PSScriptRoot -ChildPath "LogFile.txt"
 
 # Define the path to the CSV file where Bluetooth device information will be saved
-$deviceFile = Join-Path -Path $PSScriptRoot -ChildPath "Devices.csv"
+$deviceFile = Join-Path -Path $PSScriptRoot -ChildPath "BTDevice.csv"
 
 #-------------------------------------------------------------------------------------------------------#
 # Function to retrieve all currently paired bluetooth devices and assign numeric IDs
@@ -93,10 +93,10 @@ function SaveToCSV {
     $chosenDevice = MatchUserInput
 
     # Export the list of devices to a CSV file, overwriting any existing file
-    $chosenDevice | Export-Csv -Path $deviceFile -NoTypeInformation -Force
+    $chosenDevice | Select-Object DeviceName, MACAddress | Export-Csv -Path $deviceFile -NoTypeInformation -Force
 
     # Log that device information was saved
-    Log-Message "New Bluetooth Device Information Saved to Devices.csv"
+    Log-Message "New Bluetooth Device Information Saved to BTDevice.csv"
 
     # Display a confirmation message to the user
     Write-Host ""
@@ -109,6 +109,6 @@ function SaveToCSV {
 
 # Print the list of retrieved devices to the console
 $retrievedDevices = RetrieveBluetoothInfo
-$retrievedDevices | Format-Table -AutoSize
+$retrievedDevices | Select-Object DeviceID, DeviceName | Format-Table -AutoSize
 
 SaveToCSV

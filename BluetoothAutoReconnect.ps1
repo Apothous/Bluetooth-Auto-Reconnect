@@ -8,23 +8,24 @@
 # User Configuration
 #-------------------------------------------------------------------------------------------------------#
 
-# Name of the Bluetooth device
-#$friendlyName = "JBL ENDURANCE PEAK 3" #<------ Change this to the Desired Device Name
-
-# MAC address of the Bluetooth device (no colons, all uppercase)
-#$deviceMAC = "F0A96864517E" #<------ Change this to the Desired MAC Address
-
 # Set the main loop interval
 $interval = 30
 
 # Set wait time after first noticing disconnected
 $firstCheckInterval = 60
 
+#-------------------------------------------------------------------------------------------------------#
+# Static Global Variables
+#-------------------------------------------------------------------------------------------------------#
+
 # File path where logs will be saved
 $logFile = Join-Path -Path $PSScriptRoot -ChildPath "LogFile.txt"
 
 # Define the path to the CSV file where Bluetooth device information will be saved
-$deviceFile = Join-Path -Path $PSScriptRoot -ChildPath "Devices.csv"
+$deviceFile = Join-Path -Path $PSScriptRoot -ChildPath "BTDevice.csv"
+
+# Define the A2DP profile service GUID (this is standard and should not change)
+$a2dpGuid = [Guid]::Parse("0000110b-0000-1000-8000-00805f9b34fb")
 
 #-------------------------------------------------------------------------------------------------------#
 # Type Definition for Bluetooth Device Structure and Service Manager
@@ -78,21 +79,45 @@ function Convert-MacToULong {
 # Function to check device status
 #-------------------------------------------------------------------------------------------------------#
 function DeviceStatus {
-    # Import the CSV and grab the DeviceName of the first entry
-    $csvData = Import-Csv -Path $deviceFile
+    # Load device configuration if not already loaded
+    if (-not $script:deviceInfoLoaded) {
+        LogMessage "Attempting to load device information from $deviceFile..."
+        if (-not (Test-Path $deviceFile)) {
+            $msg = "Device data file not found. Please run FindBTDeviceInfo.ps1 first to create it."
+            Write-Error $msg
+            LogMessage $msg
+            throw $msg # Terminate script if config file is missing
+        }
 
-    if (-not $csvData -or $csvData.Count -eq 0) {
-        Write-Host "No device data found in $deviceFile"
-        return $false
+        $csvData = Import-Csv -Path $deviceFile
+        if (-not $csvData -or $csvData.Count -eq 0) {
+            $msg = "No device data found in $deviceFile or the file is empty. Please run FindBTDeviceInfo.ps1."
+            Write-Error $msg
+            LogMessage $msg
+            throw $msg # Terminate script if config file is empty
+        }
+
+        $script:friendlyName = $csvData[0].DeviceName
+        $script:deviceMAC = $csvData[0].MACAddress
+        
+        # Prepare Device Info Structure (moved here, populates script-scoped $script:info)
+        $script:btAddr = Convert-MacToULong $script:deviceMAC
+        $script:info = New-Object "BLUETOOTH_DEVICE_INFO"
+        $script:info.dwSize = [System.Runtime.InteropServices.Marshal]::SizeOf([BLUETOOTH_DEVICE_INFO]) # More robust way to get size
+        $script:info.Address = $script:btAddr
+        $script:info.fConnected = $false # Connection status isn't required for toggling service here
+
+        $script:deviceInfoLoaded = $true
+        LogMessage "Device information loaded: Name='$($script:friendlyName)', MAC='$($script:deviceMAC)'."
+        Write-Host "Device information loaded: Name='$($script:friendlyName)', MAC='$($script:deviceMAC)'."
     }
 
-    $nameToCheck = $csvData[0].DeviceName  # Use the first device in the list (or loop if needed)
+    $nameToCheck = $script:friendlyName # Use the loaded friendly name
     $statusOK = "OK"
     $foundAny = $false
 
     # Get all audio endpoint devices (connected or not)
     $devices = Get-PnpDevice -Class AudioEndpoint
-
     Write-Host "-------------------------------------------------------------------------"
 
     foreach ($device in $devices) {
@@ -103,10 +128,10 @@ function DeviceStatus {
                 Write-Host "Checking device: $($device.FriendlyName)"
                 Write-Host "Status: $($device.Status)"
                 if ($device.Status -eq $statusOK) {
-                    Write-Host "Device is connected."
+                    Write-Host "Device is connected!"
                     return $true
                 } else {
-                    Write-Host "Device is disconnected"
+                    Write-Host "Device is disconnected!"
                     Write-Host ""
                 }
             }
@@ -123,22 +148,6 @@ function DeviceStatus {
 }
 
 #-------------------------------------------------------------------------------------------------------#
-# Prepare Device Info Structure
-#-------------------------------------------------------------------------------------------------------#
-
-# Convert the MAC string to a 64-bit address as required by the Bluetooth API
-$btAddr = Convert-MacToULong $deviceMAC
-
-# Instantiate the Bluetooth device structure and populate its fields
-$info = New-Object "BLUETOOTH_DEVICE_INFO"
-$info.dwSize = 560  # Struct size in bytes
-$info.Address = $btAddr
-$info.fConnected = $false    # Connection status isn't required for toggling service here
-
-# Define the A2DP profile service GUID (this is standard and should not change)
-$a2dpGuid = [Guid]::Parse("0000110b-0000-1000-8000-00805f9b34fb") 
-
-#-------------------------------------------------------------------------------------------------------#
 # Main Execution: Toggle A2DP Service
 #-------------------------------------------------------------------------------------------------------#
 
@@ -149,17 +158,17 @@ while ($true) {
     if ($connected -eq $false) {
         if ($firstCheck -eq $true) {
             $firstCheck = $false
-            Write-Host "Device has been disconnected"
-            Write-Host "Waiting $firstCheckInterval seconds before reconnecting "
+            Write-Host "Device has been disconnected!"
+            Write-Host "Waiting $firstCheckInterval seconds before reconnecting."
             Start-Sleep $firstCheckInterval
         } else {
             try {
-                Write-Host "Toggling A2DP service for $friendlyName"
+                Write-Host "Toggling A2DP service for $script:friendlyName (MAC: $script:deviceMAC)"
                 # First, disable the A2DP service for the Bluetooth device
-                [void][BtServiceManager]::BluetoothSetServiceState([IntPtr]::Zero, [ref]$info, [ref]$a2dpGuid, 0)
+                [void][BtServiceManager]::BluetoothSetServiceState([IntPtr]::Zero, [ref]$script:info, [ref]$a2dpGuid, 0)
 
                 # Then, re-enable the A2DP service
-                [void][BtServiceManager]::BluetoothSetServiceState([IntPtr]::Zero, [ref]$info, [ref]$a2dpGuid, 1)
+                [void][BtServiceManager]::BluetoothSetServiceState([IntPtr]::Zero, [ref]$script:info, [ref]$a2dpGuid, 1)
             }
             catch {
                 # Capture and log any errors that occur during the toggle process
