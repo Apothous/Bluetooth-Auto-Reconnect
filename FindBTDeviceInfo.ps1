@@ -56,7 +56,6 @@ function RetrieveBluetoothInfo {
 #-------------------------------------------------------------------------------------------------------#
 # Function to get user input
 #-------------------------------------------------------------------------------------------------------#
-
 function GetUserInput {
     Write-Host "Please choose your desired device from the list using the Device ID number: " 
     $userInput = Read-Host
@@ -80,7 +79,7 @@ function MatchUserInput {
 
         Write-Host ""
         Write-Host "Invalid choice. Please try again."
-        Write-Host ""
+        Write-Host "----------------------------------------------------------------------------------------"
     }
 }
 
@@ -100,6 +99,7 @@ function SaveToCSV {
     # Display a confirmation message to the user
     Write-Host ""
     Write-Host "Bluetooth devices saved to $deviceFile"
+    Write-Host "----------------------------------------------------------------------------------------"
 }
 
 #-------------------------------------------------------------------------------------------------------#
