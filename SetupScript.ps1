@@ -11,7 +11,7 @@
 #-------------------------------------------------------------------------------------------------------#
 # Function to check for Admin privileges
 #-------------------------------------------------------------------------------------------------------#
-function Test-IsAdmin {
+function TestIsAdmin {
     $currentUser = New-Object Security.Principal.WindowsPrincipal $([Security.Principal.WindowsIdentity]::GetCurrent())
     return $currentUser.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
@@ -19,7 +19,7 @@ function Test-IsAdmin {
 #-------------------------------------------------------------------------------------------------------#
 # Ensure script is running with Administrator privileges
 #-------------------------------------------------------------------------------------------------------#
-if (-not (Test-IsAdmin)) {
+if (-not (TestIsAdmin)) {
     Write-Warning "Administrator privileges are required to run this script properly, especially for creating scheduled tasks."
     Write-Host "Attempting to re-launch with elevated privileges..."
     Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File ""$($MyInvocation.MyCommand.Path)""" -Verb RunAs
@@ -126,82 +126,84 @@ function SaveToCSV {
 #-------------------------------------------------------------------------------------------------------#
 # Function to create/update the Scheduled Task
 #-------------------------------------------------------------------------------------------------------#
-function Register-BluetoothReconnectTask {
-    if (-not (Test-IsAdmin)) {
+function RegisterBluetoothReconnectTask {
+    if (-not (TestIsAdmin)) {
         Write-Host ""
         Write-Warning "Administrator privileges are required to create or update the scheduled task."
         Write-Warning "Please re-run this script as an Administrator if you wish to set up the scheduled task."
-        Write-Host "----------------------------------------------------------------------------------------" # This line might be unreachable if top-level check is robust
+        Write-Host "----------------------------------------------------------------------------------------"
         return # This return might be unreachable
     }
 
     $taskName = "Bluetooth Auto Reconnect"
     # Using the more detailed description as per your preference
-    $taskDescription = @"
-This task continuously runs a PowerShell script called Bluetooth Auto Reconnect every minute. 
-The script enables and disables the A2DP service for a paired Bluetooth audio device specified using the devices MAC Address. 
-By toggling the A2DP service the PC sends a signal to connect with the paired Bluetooth audio device if the device is within 
-range and available to connect.
-"@ -replace "`r`n", " " # Ensure description is a single line for the task property
-    $scriptPath = Join-Path 
-        -Path $PSScriptRoot 
-        -ChildPath "BluetoothAutoReconnect.ps1"
+    $taskDescription = "This task continuously runs a PowerShell script called Bluetooth Auto Reconnect every minute. The script enables and disables the A2DP service for a paired Bluetooth audio device specified using the devices MAC Address. By toggling the A2DP service the PC sends a signal to connect with the paired Bluetooth audio device if the device is within range and available to connect."
+    $scriptPath = Join-Path -Path $PSScriptRoot -ChildPath "BluetoothAutoReconnect.ps1"
     $workingDirectory = $PSScriptRoot
 
     # Action: What the task does
-    $action = New-ScheduledTaskAction 
-        -Execute 'powershell.exe' 
-        -Argument "-WindowStyle Hidden -ExecutionPolicy Bypass -File `"$scriptPath`"" 
-        -WorkingDirectory $workingDirectory
+    $taskActionParams = @{
+        Execute          = 'powershell.exe'
+        Argument         = "-WindowStyle Hidden -ExecutionPolicy Bypass -File `"$scriptPath`""
+        WorkingDirectory = $workingDirectory
+    }
+    $action = New-ScheduledTaskAction @taskActionParams
 
-    # Trigger: When the task runs
-    $trigger = New-ScheduledTaskTrigger 
-        -AtStartup
-    $trigger = New-ScheduledTaskTrigger 
-        -AtLogOn
+    # Triggers: Define multiple conditions for when the task runs
+    $triggers = @(
+        New-ScheduledTaskTrigger -AtStartup
+        New-ScheduledTaskTrigger -AtLogOn
+    )
 
     # Principal: Who the task runs as
-    $principal = New-ScheduledTaskPrincipal 
-        -UserId "NT AUTHORITY\SYSTEM" 
-        -LogonType ServiceAccount 
-        -RunLevel Highest 
+    $taskPrincipalParams = @{
+        UserId    = "NT AUTHORITY\SYSTEM"
+        LogonType = 'ServiceAccount'
+        RunLevel  = 'Highest'
+    }
+    $principal = New-ScheduledTaskPrincipal @taskPrincipalParams
 
     # Settings: Additional task settings
-    $settings = New-ScheduledTaskSettingsSet 
-        -AllowStartIfOnBatteries 
-        -DontStopIfGoingOnBatteries `
-        -Compatibility Win8 ` # Corresponds to "Configure for: Windows 10" (Win8 is a common mapping)
-        -Hidden $true ` # Hidden" checkbox
-        -ExecutionTimeLimit (New-TimeSpan -Seconds 0) ` # Unchecked "Stop the task if it runs longer than" (0 = indefinite)
-        -MultipleInstances IgnoreNew ` # "Do not start a new instance"
-        -StartWhenAvailable ` # "Run task as soon as possible after a scheduled restart is missed"
-        -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) # "If the task fails, restart every 1 minute, 3 times"
+    $taskSettingsParams = @{
+        AllowStartIfOnBatteries     = $true
+        DontStopIfGoingOnBatteries  = $true
+        Compatibility               = 'Win8' # Corresponds to "Configure for: Windows 10"
+        Hidden                      = $true
+        ExecutionTimeLimit          = (New-TimeSpan -Seconds 0) # Indefinite
+        MultipleInstances           = 'IgnoreNew'
+        StartWhenAvailable          = $true
+        RestartCount                = 3
+        RestartInterval             = (New-TimeSpan -Minutes 1)
+    }
+    $settings = New-ScheduledTaskSettingsSet @taskSettingsParams
 
     Write-Host "Attempting to register scheduled task '$taskName'..."
 
     try {
         # Unregister the task if it already exists, to ensure settings are updated
-        Get-ScheduledTask 
-            -TaskName $taskName 
-            -ErrorAction SilentlyContinue | Unregister-ScheduledTask 
-            -Confirm:$false
-        Write-Host "Any existing task named '$taskName' has been removed."
+        $existingTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+        if ($existingTask) {
+            Unregister-ScheduledTask -TaskName $taskName -Confirm:$false
+            Write-Host "Any existing task named '$taskName' has been removed."
+        }
     }
     catch {
         Write-Warning "Could not remove existing task '$taskName' (it might not exist or an error occurred): $($_.Exception.Message)"
     }
 
     try {
-        Register-ScheduledTask 
-            -TaskName $taskName 
-            -Action $action 
-            -Trigger $trigger 
-            -Principal $principal 
-            -Settings $settings 
-            -Description $taskDescription 
-            -Force
-        Write-Host "Scheduled task '$taskName' successfully registered to run at user logon."
-        LogMessage "Scheduled task '$taskName' registered/updated."
+        $registerTaskParams = @{
+            TaskName    = $taskName
+            Action      = $action
+            Trigger     = $triggers
+            Principal   = $principal
+            Settings    = $settings
+            Description = $taskDescription
+            Force       = $true
+        }
+        Register-ScheduledTask @registerTaskParams
+        Write-Host "Scheduled task '$taskName' successfully registered with multiple triggers (Startup, Logon, Resume from Sleep)."
+        LogMessage "Scheduled task '$taskName' registered/updated with multiple triggers."
     }
     catch {
         Write-Error "Failed to register scheduled task '$taskName': $($_.Exception.Message)"
@@ -226,7 +228,8 @@ SaveToCSV
 # Ask user if they want to create/update the scheduled task
 $choice = Read-Host "Do you want to create/update a scheduled task to run BluetoothAutoReconnect.ps1? (y/n)"
 if ($choice -eq 'y' -or $choice -eq 'Y') {
-    Register-BluetoothReconnectTask
+    RegisterBluetoothReconnectTask
+    Write-Host "Successfully registered scheduled task '$taskName'"
 } else {
     Write-Host "Skipping scheduled task creation."
     Write-Host "----------------------------------------------------------------------------------------"
