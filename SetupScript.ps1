@@ -9,6 +9,26 @@
 #-------------------------------------------------------------------------------------------------------#
 
 #-------------------------------------------------------------------------------------------------------#
+# Function to check for Admin privileges
+#-------------------------------------------------------------------------------------------------------#
+function Test-IsAdmin {
+    $currentUser = New-Object Security.Principal.WindowsPrincipal $([Security.Principal.WindowsIdentity]::GetCurrent())
+    return $currentUser.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+#-------------------------------------------------------------------------------------------------------#
+# Ensure script is running with Administrator privileges
+#-------------------------------------------------------------------------------------------------------#
+if (-not (Test-IsAdmin)) {
+    Write-Warning "Administrator privileges are required to run this script properly, especially for creating scheduled tasks."
+    Write-Host "Attempting to re-launch with elevated privileges..."
+    Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File ""$($MyInvocation.MyCommand.Path)""" -Verb RunAs
+    exit
+}
+
+# Script continues here if already running as Admin or after successful elevation
+
+#-------------------------------------------------------------------------------------------------------#
 # Static Global Variables
 #-------------------------------------------------------------------------------------------------------#
 
@@ -79,10 +99,8 @@ function MatchUserInput {
                 return $device
             }
         }
-
-        Write-Host ""
         Write-Host "Invalid choice. Please try again."
-        Write-Host "----------------------------------------------------------------------------------------"
+        Write-Host ""
     }
 }
 
@@ -102,15 +120,7 @@ function SaveToCSV {
     # Display a confirmation message to the user
     Write-Host ""
     Write-Host "Bluetooth devices saved to $deviceFile"
-    Write-Host "----------------------------------------------------------------------------------------"
-}
-
-#-------------------------------------------------------------------------------------------------------#
-# Function to check for Admin privileges
-#-------------------------------------------------------------------------------------------------------#
-function Test-IsAdmin {
-    $currentUser = New-Object Security.Principal.WindowsPrincipal $([Security.Principal.WindowsIdentity]::GetCurrent())
-    return $currentUser.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    Write-Host ""
 }
 
 #-------------------------------------------------------------------------------------------------------#
@@ -118,17 +128,21 @@ function Test-IsAdmin {
 #-------------------------------------------------------------------------------------------------------#
 function Register-BluetoothReconnectTask {
     if (-not (Test-IsAdmin)) {
+        Write-Host ""
         Write-Warning "Administrator privileges are required to create or update the scheduled task."
         Write-Warning "Please re-run this script as an Administrator if you wish to set up the scheduled task."
-        return
+        Write-Host "----------------------------------------------------------------------------------------" # This line might be unreachable if top-level check is robust
+        return # This return might be unreachable
     }
 
     $taskName = "Bluetooth Auto Reconnect"
-    $taskDescription = "This task continuously runs a PowerShell script called Bluetooth Auto Reconnect every minute. 
-    The script enables and disables the A2DP service for a paired Bluetooth audio device specified using the devices MAC Address. 
-    By toggling the A2DP service the PC sends a signal to connect with the paired Bluetooth audio device if the device is within 
-    range and available to connect."
-
+    # Using the more detailed description as per your preference
+    $taskDescription = @"
+This task continuously runs a PowerShell script called Bluetooth Auto Reconnect every minute. 
+The script enables and disables the A2DP service for a paired Bluetooth audio device specified using the devices MAC Address. 
+By toggling the A2DP service the PC sends a signal to connect with the paired Bluetooth audio device if the device is within 
+range and available to connect.
+"@ -replace "`r`n", " " # Ensure description is a single line for the task property
     $scriptPath = Join-Path 
         -Path $PSScriptRoot 
         -ChildPath "BluetoothAutoReconnect.ps1"
@@ -203,12 +217,6 @@ function Register-BluetoothReconnectTask {
 # Initial log entry for this script run
 LogMessage "FindBTDeviceInfo.ps1 script started."
 
-# Check if running with Admin privileges early on, as it's needed for scheduled task creation
-if (-not (Test-IsAdmin)) {
-    Write-Warning "This script is not running with Administrator privileges."
-    Write-Warning "You will be able to select and save a device, but creating/updating the scheduled task will be skipped."
-}
-
 # Print the list of retrieved devices to the console
 $retrievedDevices = RetrieveBluetoothInfo
 $retrievedDevices | Select-Object DeviceID, DeviceName | Format-Table -AutoSize
@@ -216,7 +224,6 @@ $retrievedDevices | Select-Object DeviceID, DeviceName | Format-Table -AutoSize
 SaveToCSV
 
 # Ask user if they want to create/update the scheduled task
-Write-Host ""
 $choice = Read-Host "Do you want to create/update a scheduled task to run BluetoothAutoReconnect.ps1? (y/n)"
 if ($choice -eq 'y' -or $choice -eq 'Y') {
     Register-BluetoothReconnectTask
