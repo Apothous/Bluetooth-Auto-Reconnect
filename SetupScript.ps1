@@ -149,7 +149,7 @@ function RegisterBluetoothReconnectTask {
     }
     $action = New-ScheduledTaskAction @taskActionParams
 
-    # Triggers: Define multiple conditions for when the task runs
+    # Add the task triggers
     $triggers = @(
         New-ScheduledTaskTrigger -AtStartup
         New-ScheduledTaskTrigger -AtLogOn
