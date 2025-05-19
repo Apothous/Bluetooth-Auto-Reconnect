@@ -70,7 +70,7 @@ function LogMessage {
 #-------------------------------------------------------------------------------------------------------#
 # Converts a MAC address string (without colons) to a 64-bit unsigned integer
 #-------------------------------------------------------------------------------------------------------#
-function Convert-MacToULong {
+function ConvertMacToULong {
     param($mac)
     return [Convert]::ToUInt64($mac, 16)
 }
@@ -80,7 +80,7 @@ function Convert-MacToULong {
 #-------------------------------------------------------------------------------------------------------#
 function DeviceStatus {
     # Load device configuration if not already loaded
-    if (-not $script:deviceInfoLoaded) {
+    if (-not $deviceInfoLoaded) {
         LogMessage "Attempting to load device information from $deviceFile..."
         if (-not (Test-Path $deviceFile)) {
             $msg = "Device data file not found. Please run FindBTDeviceInfo.ps1 first to create it."
@@ -97,22 +97,22 @@ function DeviceStatus {
             throw $msg # Terminate script if config file is empty
         }
 
-        $script:friendlyName = $csvData[0].DeviceName
-        $script:deviceMAC = $csvData[0].MACAddress
+        $friendlyName = $csvData[0].DeviceName
+        $deviceMAC = $csvData[0].MACAddress
         
         # Prepare Device Info Structure (moved here, populates script-scoped $script:info)
-        $script:btAddr = Convert-MacToULong $script:deviceMAC
-        $script:info = New-Object "BLUETOOTH_DEVICE_INFO"
-        $script:info.dwSize = [System.Runtime.InteropServices.Marshal]::SizeOf([BLUETOOTH_DEVICE_INFO]) # More robust way to get size
-        $script:info.Address = $script:btAddr
-        $script:info.fConnected = $false # Connection status isn't required for toggling service here
+        $btAddr = ConvertMacToULong $deviceMAC
+        $info = New-Object "BLUETOOTH_DEVICE_INFO"
+        $info.dwSize = 560  # Struct size in bytes
+        $info.Address = $btAddr
+        $info.fConnected = $false # Connection status isn't required for toggling service here
 
-        $script:deviceInfoLoaded = $true
-        LogMessage "Device information loaded: Name='$($script:friendlyName)', MAC='$($script:deviceMAC)'."
-        Write-Host "Device information loaded: Name='$($script:friendlyName)', MAC='$($script:deviceMAC)'."
+        $deviceInfoLoaded = $true
+        LogMessage "Device information loaded: Name='$($friendlyName)', MAC='$($deviceMAC)'."
+        Write-Host "Device information loaded: Name='$($friendlyName)', MAC='$($deviceMAC)'."
     }
 
-    $nameToCheck = $script:friendlyName # Use the loaded friendly name
+    $nameToCheck = $friendlyName # Use the loaded friendly name
     $statusOK = "OK"
     $foundAny = $false
 
@@ -154,7 +154,7 @@ function DeviceStatus {
 $firstCheck = $true
 
 while ($true) {
-    $connected = Device-Status
+    $connected = DeviceStatus
     if ($connected -eq $false) {
         if ($firstCheck -eq $true) {
             $firstCheck = $false
