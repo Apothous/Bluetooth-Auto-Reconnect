@@ -3,3 +3,6 @@ BTDevice.csv
 test.ps1
 BluetoothAutoReconnectOld.ps1
 BluetoothAutoReconnect copy.ps1
+GetBTDeviceStatus.ps1
+.vscode
+settings.json
