@@ -153,6 +153,7 @@ function RegisterBluetoothReconnectTask {
     $triggers = @(
         New-ScheduledTaskTrigger -AtStartup
         New-ScheduledTaskTrigger -AtLogOn
+        New-ScheduledTaskTrigger -AtWorkstationUnlock
     )
 
     # Principal: Who the task runs as
@@ -205,7 +206,7 @@ function RegisterBluetoothReconnectTask {
             Force       = $true
         }
         Register-ScheduledTask @registerTaskParams
-        Write-Host "Scheduled task '$taskName' successfully registered with multiple triggers (Startup, Logon)."
+        Write-Host "Scheduled task '$taskName' successfully registered with multiple triggers (Startup, Logon, Workstation Unlock)."
         LogMessage "Scheduled task '$taskName' registered/updated with multiple triggers."
         Start-Sleep 2
     }
