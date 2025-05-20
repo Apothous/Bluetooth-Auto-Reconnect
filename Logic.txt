@@ -1,0 +1,36 @@
+Setup script
+
+
+This script has two functions. 
+
+1. It finds all the currently paired Bluetooth Devices and outputs a numbered list to the console where the user is then prompted to choose the device they would like to use by inputting the corresponding number. Once the user has chosen a device the script saves the device name and the device MAC address to a csv file where it can be accessed by the main script. 
+
+2. The script then asks the user if they would like to automatically build the windows scheduled task that will run the main script. If the user chooses yes then the script checks if a the task already exists, if it does exist then the script deletes the task and rebuilds it before closing. 
+
+User Steps
+
+	- User opens the setup script.
+
+	- The script immediately checks if Powershell has been opened as an administrator (required to build a scheduled task), if not the script restarts itself with administrator privileges.
+
+	- The user is then provided with a list of all currently paired Bluetooth devices and prompted to select a device using a paired temporary id number (1,2,3, etc...).
+	
+	- If the user selects an incorrect device the user is asked to choose a valid device.
+
+	- Once the user has chosen a valid device the script writes the device name and Mac address to a csv file where it can be accessed by the main script.
+
+	- The script then prompts the user to choose whether or not they would like to build the scheduled task by typing either y or n.
+
+	- If the user chooses y, the script checks to see if the task already exists, if it does, it deletes the task and rebuilds it then exits the program.
+
+	- If the user chooses n, the script exits the program.
+
+
+
+
+Bluetooth Auto Reconnect script
+
+
+This is the main watchdog script. This script watches for the connection status of a specified Bluetooth device and automatically reconnects the device after it's been disconnected using a given time interval. The script is started automatically by a windows scheduled task when the PC starts up, or a user logs in, and then continuously runs in the background. The script uses the infomation for the device selected by the setup script that is stored in a csv file. The script continuosly loops at a set time interval (currently 30 secs) to check the devices connection status. If the device is connected the loop waits the set interval an checks again. If the device is found to be disconnected the script checks whether or not this is the first disconnected state in a row. If it is the first disconnected state in a row the scrip the waits an extra time interval (currently 60 secs) before checking the conection state again. If this is second time or more that the device has been detected as disconnected then the script runs the logic to toggle the audio (A2DP) service for the specified device. This toggling action prompts the PC to reconnect to the Bluetooth device. 
+
+Edge Case (not yet developed): If for some reason the device is not found at all in the list of paired Bluetooth devices, then the user would need to manually hit the pair button on the device and then use the Windows Action center to pair the PC to the device. If the device had been previously set up there would be no reason to re-run the setup script since the device name and MAC address would not change. The only time the setup script would need to be re-run would be if the Bluetooth device itself has been changed to a different device.
