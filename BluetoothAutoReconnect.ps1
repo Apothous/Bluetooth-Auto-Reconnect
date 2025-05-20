@@ -30,6 +30,7 @@ $script:a2dpGuid = [Guid]::Parse("0000110b-0000-1000-8000-00805f9b34fb")
 
 $script:deviceData =$null
 $script:info = $null
+$script:firstCheck = $true
 
 #-------------------------------------------------------------------------------------------------------#
 # Type Definition for Bluetooth Device Structure and Service Manager
@@ -187,8 +188,6 @@ function DeviceStatus {
 #-------------------------------------------------------------------------------------------------------#
 # Main Execution: Toggle A2DP Service
 #-------------------------------------------------------------------------------------------------------#
-
-$firstCheck = $true
 
 while ($true) {
     $connected = DeviceStatus
