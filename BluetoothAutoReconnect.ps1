@@ -83,6 +83,7 @@ function ConvertMacToULong {
 # Function to check device info file exists
 #-------------------------------------------------------------------------------------------------------#
 function CheckForDeviceFile {
+    Write-Host "--------------------------------------------------------------------------------------------------------------------------"
     Write-Host "Checking for device data file: $script:deviceFile..."
     if (Test-Path $script:deviceFile) {
         Write-Host "Device data file found."
@@ -110,6 +111,7 @@ function ImportFromCSV {
             Start-Sleep 10
             throw $msg # Terminate script if device file is empty
         } else {
+            Write-Host ""
             Write-Host "Device information loaded: Name='$($script:deviceData[0].DeviceName)', MAC='$($script:deviceData[0].MACAddress)'."
         }
     }
@@ -154,7 +156,7 @@ function DeviceStatus {
 
         # Get all audio endpoint devices (connected or not)
         $devices = Get-PnpDevice -Class AudioEndpoint
-        Write-Host "-------------------------------------------------------------------------"
+        Write-Host "--------------------------------------------------------------------------------------------------------------------------"
 
         foreach ($device in $devices) {
             if ($device.FriendlyName -match "\(([^)]+)\)") {
