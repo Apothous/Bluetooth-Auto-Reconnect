@@ -22,6 +22,7 @@ function TestIsAdmin {
 if (-not (TestIsAdmin)) {
     Write-Warning "Administrator privileges are required to run this script properly, especially for creating scheduled tasks."
     Write-Host "Attempting to re-launch with elevated privileges..."
+    Start-Sleep 1
     Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File ""$($MyInvocation.MyCommand.Path)""" -Verb RunAs
     exit
 }
@@ -131,7 +132,6 @@ function RegisterBluetoothReconnectTask {
         Write-Host ""
         Write-Warning "Administrator privileges are required to create or update the scheduled task."
         Write-Warning "Please re-run this script as an Administrator if you wish to set up the scheduled task."
-        Write-Host "----------------------------------------------------------------------------------------"
         return # This return might be unreachable
     }
 
@@ -178,6 +178,7 @@ function RegisterBluetoothReconnectTask {
     $settings = New-ScheduledTaskSettingsSet @taskSettingsParams
 
     Write-Host "Attempting to register scheduled task '$taskName'..."
+    Start-Sleep 2
 
     try {
         # Unregister the task if it already exists, to ensure settings are updated
@@ -185,10 +186,12 @@ function RegisterBluetoothReconnectTask {
         if ($existingTask) {
             Unregister-ScheduledTask -TaskName $taskName -Confirm:$false
             Write-Host "Any existing task named '$taskName' has been removed."
+            Start-Sleep 2
         }
     }
     catch {
         Write-Warning "Could not remove existing task '$taskName' (it might not exist or an error occurred): $($_.Exception.Message)"
+        Start-Sleep 3
     }
 
     try {
@@ -202,14 +205,15 @@ function RegisterBluetoothReconnectTask {
             Force       = $true
         }
         Register-ScheduledTask @registerTaskParams
-        Write-Host "Scheduled task '$taskName' successfully registered with multiple triggers (Startup, Logon, Resume from Sleep)."
+        Write-Host "Scheduled task '$taskName' successfully registered with multiple triggers (Startup, Logon)."
         LogMessage "Scheduled task '$taskName' registered/updated with multiple triggers."
+        Start-Sleep 2
     }
     catch {
         Write-Error "Failed to register scheduled task '$taskName': $($_.Exception.Message)"
         LogMessage "Error registering scheduled task '$taskName': $($_.Exception.Message)"
+        Start-Sleep 2
     }
-    Write-Host "----------------------------------------------------------------------------------------"
 }
 
 #-------------------------------------------------------------------------------------------------------#
@@ -230,8 +234,9 @@ $choice = Read-Host "Do you want to create/update a scheduled task to run Blueto
 if ($choice -eq 'y' -or $choice -eq 'Y') {
     RegisterBluetoothReconnectTask
     Write-Host "Successfully registered scheduled task '$taskName'"
+    Start-Sleep 3
 } else {
     Write-Host "Skipping scheduled task creation."
-    Write-Host "----------------------------------------------------------------------------------------"
+    Start-Sleep 3
 }
 LogMessage "FindBTDeviceInfo.ps1 script finished."
