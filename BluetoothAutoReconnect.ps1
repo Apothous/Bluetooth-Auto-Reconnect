@@ -79,6 +79,20 @@ function ConvertMacToULong {
 }
 
 #-------------------------------------------------------------------------------------------------------#
+# Function to test if OS earlier than Windows 11
+#-------------------------------------------------------------------------------------------------------#
+function IsWindows11 {
+    $osVersion = [System.Environment]::OSVersion.Version
+    $buildNumber = $osVersion.Build
+
+    if ($buildNumber -lt 22000) {
+        return $false
+    } else {
+        return $true
+    }
+}
+
+#-------------------------------------------------------------------------------------------------------#
 # Function to check device status
 #-------------------------------------------------------------------------------------------------------#
 function DeviceStatus {
@@ -128,20 +142,39 @@ function DeviceStatus {
     $devices = Get-PnpDevice -Class AudioEndpoint
     Write-Host "-------------------------------------------------------------------------"
 
-    foreach ($device in $devices) {
-        if ($device.FriendlyName -match "\(([^)]+)\)") {
-            $nameInParens = $matches[1] -replace '\s+(Stereo|Hands-Free|Headset|AG Audio)$', ''
-
-            if ($nameInParens -eq $nameToCheck) {
-                $foundAny = $true
-                Write-Host "Checking device: $($device.FriendlyName)"
-                Write-Host "Status: $($device.Status)"
-                if ($device.Status -eq $statusOK) {
-                    Write-Host "Device is connected."
-                    return $true
-                } else {
-                    Write-Host "Device is disconnected"
-                    Write-Host ""
+    if (IsWindows11) {
+        foreach ($device in $devices) {
+            if ($device.FriendlyName -match "\(([^)]+)\)") {
+                $nameInParens = $matches[1]
+                if ($nameInParens -eq $nameToCheck) {
+                    $foundAny = $true
+                    Write-Host "Checking device: $($device.FriendlyName)"
+                    Write-Host "Status: $($device.Status)"
+                    if ($device.Status -eq $statusOK) {
+                        Write-Host "Device is connected."
+                        return $true
+                    } else {
+                        Write-Host "Device is disconnected"
+                        Write-Host ""
+                    }
+                }
+            }
+        }
+    } else {
+        foreach ($device in $devices) {
+            if ($device.FriendlyName -match "\(([^)]+)\)") {
+                $nameInParens = $matches[1] -replace '\s+(Stereo|Hands-Free|Headset|AG Audio)$', '' <# Action when this condition is true #>
+                if ($nameInParens -eq $nameToCheck) {
+                    $foundAny = $true
+                    Write-Host "Checking device: $($device.FriendlyName)"
+                    Write-Host "Status: $($device.Status)"
+                    if ($device.Status -eq $statusOK) {
+                        Write-Host "Device is connected."
+                        return $true
+                    } else {
+                        Write-Host "Device is disconnected"
+                        Write-Host ""
+                    }
                 }
             }
         }
