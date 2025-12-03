@@ -197,9 +197,9 @@ function ToggleA2DPService {
     try {
         Write-Host "Toggling A2DP service for $script:friendlyName (MAC: $script:deviceMAC)"
         # First, disable the A2DP service for the Bluetooth device
-        $void = [BtServiceManager]::BluetoothSetServiceState([IntPtr]::Zero, [ref]$script:info, [ref]$script:a2dpGuid, 0)
+        void = [BtServiceManager]::BluetoothSetServiceState([IntPtr]::Zero, [ref]$script:info, [ref]$script:a2dpGuid, 0)
         # Then, re-enable the A2DP service
-        $void = [BtServiceManager]::BluetoothSetServiceState([IntPtr]::Zero, [ref]$script:info, [ref]$script:a2dpGuid, 1)
+        void = [BtServiceManager]::BluetoothSetServiceState([IntPtr]::Zero, [ref]$script:info, [ref]$script:a2dpGuid, 1)
         Write-Host "A2DP service toggled successfully."
     } catch {
         # Capture and log any errors that occur during the toggle process
