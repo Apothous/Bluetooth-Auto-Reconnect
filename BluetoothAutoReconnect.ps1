@@ -101,13 +101,9 @@ function GetCurrentUser {
     } catch {
         $currentIdentity = $env:USERNAME
     }
-    LogMessage "Running DeviceStatus as '$currentIdentity'."
+    #LogMessage "Running DeviceStatus as '$currentIdentity'."
     Write-Host "Running DeviceStatus as '$currentIdentity'."
 }
-
-#-------------------------------------------------------------------------------------------------------#
-# Function to get all audio endpoint devices (connected or not) and guard against failures
-#-------------------------------------------------------------------------------------------------------#
 
 #-------------------------------------------------------------------------------------------------------#
 # Function to check device status
