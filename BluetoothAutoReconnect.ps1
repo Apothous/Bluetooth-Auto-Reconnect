@@ -79,20 +79,6 @@ function ConvertMacToULong {
 }
 
 #-------------------------------------------------------------------------------------------------------#
-# Function to test if OS earlier than Windows 11
-#-------------------------------------------------------------------------------------------------------#
-function IsWindows11 {
-    $osVersion = [System.Environment]::OSVersion.Version
-    $buildNumber = $osVersion.Build
-
-    if ($buildNumber -lt 22000) {
-        return $false
-    } else {
-        return $true
-    }
-}
-
-#-------------------------------------------------------------------------------------------------------#
 # Function to log current user/session for diagnostics
 #-------------------------------------------------------------------------------------------------------#
 function GetCurrentUser {
@@ -102,7 +88,7 @@ function GetCurrentUser {
         $currentIdentity = $env:USERNAME
     }
     #LogMessage "Running DeviceStatus as '$currentIdentity'."
-    Write-Host "Running DeviceStatus as '$currentIdentity'."
+    Write-Host "Running DeviceStatus as user '$currentIdentity'."
 }
 
 #-------------------------------------------------------------------------------------------------------#
