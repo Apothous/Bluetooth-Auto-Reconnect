@@ -79,17 +79,16 @@ function ConvertMacToULong {
 }
 
 #-------------------------------------------------------------------------------------------------------#
-# Function to test if OS earlier than Windows 11
+# Function to log current user/session for diagnostics
 #-------------------------------------------------------------------------------------------------------#
-function IsWindows11 {
-    $osVersion = [System.Environment]::OSVersion.Version
-    $buildNumber = $osVersion.Build
-
-    if ($buildNumber -lt 22000) {
-        return $false
-    } else {
-        return $true
+function GetCurrentUser {
+    try {
+        $currentIdentity = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+    } catch {
+        $currentIdentity = $env:USERNAME
     }
+    #LogMessage "Running DeviceStatus as user '$currentIdentity'."
+    Write-Host "Running DeviceStatus as user '$currentIdentity'."
 }
 
 #-------------------------------------------------------------------------------------------------------#
@@ -100,7 +99,7 @@ function DeviceStatus {
     if (-not $script:deviceInfoLoaded) {
         LogMessage "Attempting to load device information from $script:deviceFile..."
         if (-not (Test-Path $script:deviceFile)) {
-            $msg = "Device data file not found. Please run FindBTDeviceInfo.ps1 first to create it."
+            $msg = "Device data file not found. Please run SetupScript.ps1 first to create it."
             Write-Error $msg
             LogMessage $msg
             throw $msg # Terminate script if config file is missing
@@ -108,7 +107,7 @@ function DeviceStatus {
 
         $csvData = Import-Csv -Path $script:deviceFile
         if (-not $csvData -or $csvData.Count -eq 0) {
-            $msg = "No device data found in $script:deviceFile or the file is empty. Please run FindBTDeviceInfo.ps1."
+            $msg = "No device data found in $script:deviceFile or the file is empty. Please run SetupScript.ps1."
             Write-Error $msg
             LogMessage $msg
             throw $msg # Terminate script if config file is empty
@@ -131,62 +130,64 @@ function DeviceStatus {
 
         $script:deviceInfoLoaded = $true
         LogMessage "Device information loaded: Name='$($script:friendlyName)', MAC='$($script:deviceMAC)'."
+        Write-Host "-------------------------------------------------------------------------"
         Write-Host "Device information loaded: Name='$($script:friendlyName)', MAC='$($script:deviceMAC)'."
     }
+
+    Write-Host "-------------------------------------------------------------------------"
 
     $nameToCheck = $script:friendlyName # Use the loaded friendly name
     $statusOK = "OK"
     $foundAny = $false
+    $foundConnected = $false
+    
+    GetCurrentUser
 
-    # Get all audio endpoint devices (connected or not)
-    $devices = Get-PnpDevice -Class AudioEndpoint
-    Write-Host "-------------------------------------------------------------------------"
+    # Get all audio endpoint devices (connected or not) and guard against failures
+    try {
+        $devices = Get-PnpDevice -Class AudioEndpoint -ErrorAction Stop
+    } catch {
+        LogMessage "Get-PnpDevice failed: $($_ | Out-String)"
+        Write-Error "Failed to enumerate audio endpoints. See log for details."
+    }
 
-    if (IsWindows11) {
-        foreach ($device in $devices) {
-            if ($device.FriendlyName -match "\(([^)]+)\)") {
-                $nameInParens = $matches[1]
-                if ($nameInParens -eq $nameToCheck) {
-                    $foundAny = $true
-                    Write-Host "Checking device: $($device.FriendlyName)"
-                    Write-Host "Status: $($device.Status)"
-                    if ($device.Status -eq $statusOK) {
-                        Write-Host "Device is connected."
-                        return $true
-                    } else {
-                        Write-Host "Device is disconnected"
-                        Write-Host ""
-                    }
-                }
+    # Aggregate matching endpoints first. The device should be considered connected if ANY matching endpoint reports Status='OK'.
+    $matchedDevices = @()
+    foreach ($device in $devices) {
+        $friendly = $device.FriendlyName
+        $status = $device.Status
+
+        $isMatch = $false
+        if ($friendly) {
+            if ($friendly -match "\(([^)]+)\)") {
+                $nameInParens = $matches[1] -replace '\s+(Stereo|Hands-Free|Headset|AG Audio)$', ''
+                if ($nameInParens -eq $nameToCheck) { $isMatch = $true }
             }
+            # Fallback substring match if parenthesized form isn't present
+            if (-not $isMatch -and ($friendly -like "*$nameToCheck*")) { $isMatch = $true }
         }
-    } else {
-        foreach ($device in $devices) {
-            if ($device.FriendlyName -match "\(([^)]+)\)") {
-                $nameInParens = $matches[1] -replace '\s+(Stereo|Hands-Free|Headset|AG Audio)$', '' <# Action when this condition is true #>
-                if ($nameInParens -eq $nameToCheck) {
-                    $foundAny = $true
-                    Write-Host "Checking device: $($device.FriendlyName)"
-                    Write-Host "Status: $($device.Status)"
-                    if ($device.Status -eq $statusOK) {
-                        Write-Host "Device is connected."
-                        return $true
-                    } else {
-                        Write-Host "Device is disconnected"
-                        Write-Host ""
-                    }
-                }
-            }
+
+        if ($isMatch) {
+            $matchedDevices += [PSCustomObject]@{ FriendlyName = $friendly; Status = $status }
         }
     }
 
-    if ($foundAny) {
-        Write-Host "No matching '$nameToCheck' devices are currently connected."
-    } else {
-        Write-Host "No matching Bluetooth ($nameToCheck) devices are paired."
+    if ($matchedDevices.Count -gt 0) {
+        $foundAny = $true
+        $connectedCount = (@($matchedDevices | Where-Object { $_.Status -eq $statusOK })).Count
+        if ($connectedCount -gt 0) {
+            $foundConnected = $true
+            Write-Host "Found $($matchedDevices.Count) matching '$nameToCheck' endpoint(s); $connectedCount connected."
+        } else {
+            Write-Host "Found $($matchedDevices.Count) matching '$nameToCheck' endpoint(s) but none are connected."
+        }
     }
 
-    return $false
+    if ($foundAny -eq $false) {
+        Write-Host "Found no matching '$nameToCheck' endpoint(s); skipping toggle until device is present."
+    }
+
+    return $foundConnected
 }
 
 #-------------------------------------------------------------------------------------------------------#
@@ -199,9 +200,11 @@ function ToggleA2DPService {
         [void][BtServiceManager]::BluetoothSetServiceState([IntPtr]::Zero, [ref]$script:info, [ref]$script:a2dpGuid, 0)
         # Then, re-enable the A2DP service
         [void][BtServiceManager]::BluetoothSetServiceState([IntPtr]::Zero, [ref]$script:info, [ref]$script:a2dpGuid, 1)
+        Write-Host "A2DP service toggled successfully."
     } catch {
         # Capture and log any errors that occur during the toggle process
-        LogMessage "Error occurred while toggling A2DP service: $_"
+        LogMessage "Error occurred while toggling A2DP service: $($_ | Out-String)"
+        Write-Error "An error occurred while toggling A2DP service. See log for details."
     }
 }
 
@@ -211,19 +214,20 @@ function ToggleA2DPService {
 
 while ($true) {
     $connected = DeviceStatus
-    if ($connected -eq $false) {
-        if ($script:firstCheck -eq $true) {
-            $script:firstCheck = $false
-            Write-Host "Device has been disconnected!"
-            Write-Host "Waiting $script:firstCheckInterval seconds before reconnecting."
-            Start-Sleep $script:firstCheckInterval
-        } else {
-            ToggleA2DPService
-         }  
+    if ($connected -eq $true) {
+        if ($script:firstCheck -eq $false) { $script:firstCheck = $true }
+    } elseif ($connected -eq $false -and $script:firstCheck -eq $true) {
+        $script:firstCheck = $false
+        Write-Host "Waiting $script:firstCheckInterval seconds before attempting to reconnect."
+        Start-Sleep $script:firstCheckInterval
+    } elseif ($connected -eq $false -and $script:firstCheck -eq $false) {
+        Write-Host "Device is still disconnected; attempting to toggle A2DP service..."
+        ToggleA2DPService
     } else {
-        if ($script:firstCheck -eq $false) {
-            $script:firstCheck = $true
-        } 
+        # If DeviceStatus returned something unexpected, skip and retry later
+        Write-Host "DeviceStatus returned unexpected value; retrying later."
+        LogMessage "DeviceStatus returned unexpected value: $connected"
     }
+
     Start-Sleep $script:interval
 }
