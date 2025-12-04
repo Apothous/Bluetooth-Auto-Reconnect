@@ -137,7 +137,7 @@ function RegisterBluetoothReconnectTask {
 
     $taskName = "Bluetooth Auto Reconnect"
     # Using the more detailed description as per your preference
-    $taskDescription = "This task continuously runs a PowerShell script called Bluetooth Auto Reconnect every minute. The script enables and disables the A2DP service for a paired Bluetooth audio device specified using the devices MAC Address. By toggling the A2DP service the PC sends a signal to connect with the paired Bluetooth audio device if the device is within range and available to connect."
+    $taskDescription = "This task continuously runs a PowerShell script called Bluetooth Auto Reconnect every minute. The script enables and disables the A2DP service for a paired bluetooth audio device specified using the devices MAC Address. By toggling the A2DP service the PC sends a signal to connect with the paired bluetooth audio device if the device is within range and available to connect."
     $scriptPath = Join-Path -Path $PSScriptRoot -ChildPath "BluetoothAutoReconnect.ps1"
     $workingDirectory = $PSScriptRoot
 
@@ -204,8 +204,8 @@ function RegisterBluetoothReconnectTask {
             Force       = $true
         }
         Register-ScheduledTask @registerTaskParams
-        Write-Host "Scheduled task '$taskName' successfully registered with multiple triggers (Startup, Logon)."
-        LogMessage "Scheduled task '$taskName' registered/updated with multiple triggers."
+        Write-Host "Scheduled task '$taskName' successfully registered trigger (Logon)."
+        LogMessage "Scheduled task '$taskName' registered/updated with trigger (Logon)."
         Start-Sleep 2
     }
     catch {
@@ -220,7 +220,7 @@ function RegisterBluetoothReconnectTask {
 #-------------------------------------------------------------------------------------------------------#
 
 # Initial log entry for this script run
-LogMessage "FindBTDeviceInfo.ps1 script started."
+LogMessage "SetupScript.ps1 has started."
 
 # Print the list of retrieved devices to the console
 $retrievedDevices = RetrieveBluetoothInfo
@@ -238,4 +238,4 @@ if ($choice -eq 'y' -or $choice -eq 'Y') {
     Write-Host "Skipping scheduled task creation."
     Start-Sleep 3
 }
-LogMessage "FindBTDeviceInfo.ps1 script finished."
+LogMessage "SetupScript.ps1 has finished."
