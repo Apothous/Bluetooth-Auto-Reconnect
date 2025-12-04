@@ -87,7 +87,7 @@ function GetCurrentUser {
     } catch {
         $currentIdentity = $env:USERNAME
     }
-    #LogMessage "Running DeviceStatus as '$currentIdentity'."
+    #LogMessage "Running DeviceStatus as user '$currentIdentity'."
     Write-Host "Running DeviceStatus as user '$currentIdentity'."
 }
 
