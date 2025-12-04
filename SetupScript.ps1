@@ -151,7 +151,6 @@ function RegisterBluetoothReconnectTask {
 
     # Add the task triggers
     $triggers = @(
-        New-ScheduledTaskTrigger -AtStartup
         New-ScheduledTaskTrigger -AtLogOn
     )
 
