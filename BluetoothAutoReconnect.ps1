@@ -9,7 +9,7 @@
 #-------------------------------------------------------------------------------------------------------#
 
 # Set the main loop interval
-$script:interval = 30
+$script:toggleInterval = 30
 
 # Set wait time after first noticing disconnected
 $script:firstCheckInterval = 60
@@ -209,25 +209,42 @@ function ToggleA2DPService {
 }
 
 #-------------------------------------------------------------------------------------------------------#
+# Event-Driven Bluetooth Reconnection Logic
+#-------------------------------------------------------------------------------------------------------#
+
+Register-WmiEvent -Query $Query -SourceIdentifier "BTDeviceEvent" -Action {
+    try {
+        Write-Host "[Event Triggered] Checking device connection status..."
+
+        if (-not (DeviceStatus)) {
+            Write-Host "$($script:friendlyName) is disconnected. Waiting $($script:firstCheckInterval) seconds..."
+            Start-Sleep $script:firstCheckInterval
+            Write-Host "Starting A2DP service toggle loop..."
+
+            while (-not (DeviceStatus)) {
+                ToggleA2DPService
+                Start-Sleep $script:toggleInterval
+            }
+
+            Write-Host "$($script:friendlyName) successfully reconnected."
+        } else {
+            Write-Host "$($script:friendlyName) is connected. Waiting for next event."
+        }
+
+    } catch {
+        LogMessage "Unexpected error in EventHandler: $($_ | Out-String)"
+        Write-Error "Unexpected error in EventHandler: $($_.Exception.Message)"
+    }
+}
+
+#-------------------------------------------------------------------------------------------------------#
 # Main execution logic
 #-------------------------------------------------------------------------------------------------------#
 
-while ($true) {
-    $connected = DeviceStatus
-    if ($connected -eq $true) {
-        if ($script:firstCheck -eq $false) { $script:firstCheck = $true }
-    } elseif ($connected -eq $false -and $script:firstCheck -eq $true) {
-        $script:firstCheck = $false
-        Write-Host "Waiting $script:firstCheckInterval seconds before attempting to reconnect."
-        Start-Sleep $script:firstCheckInterval
-    } elseif ($connected -eq $false -and $script:firstCheck -eq $false) {
-        Write-Host "Device is still disconnected; attempting to toggle A2DP service..."
-        ToggleA2DPService
-    } else {
-        # If DeviceStatus returned something unexpected, skip and retry later
-        Write-Host "DeviceStatus returned unexpected value; retrying later."
-        LogMessage "DeviceStatus returned unexpected value: $connected"
-    }
+GetCurrentUser
 
-    Start-Sleep $script:interval
-}
+# Start the event-driven reconnect function
+EventHandler
+
+# Wait indefinitely for events to trigger
+Wait-Event -SourceIdentifier "BTDeviceEvent"
