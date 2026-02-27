@@ -27,7 +27,6 @@ $script:deviceFile = Join-Path -Path $PSScriptRoot -ChildPath "BTDevice.csv"
 # Define the A2DP profile service GUID (this is standard and should not change)
 $script:a2dpGuid = [Guid]::Parse("0000110b-0000-1000-8000-00805f9b34fb")
 
-$script:firstCheck = $true
 $script:deviceInfoLoaded = $false
 
 #-------------------------------------------------------------------------------------------------------#
@@ -211,29 +210,40 @@ function ToggleA2DPService {
 #-------------------------------------------------------------------------------------------------------#
 # Event-Driven Bluetooth Reconnection Logic
 #-------------------------------------------------------------------------------------------------------#
+function EventHandler {
+    $Query = "SELECT * FROM __InstanceModificationEvent WITHIN 2 WHERE TargetInstance ISA 'Win32_PnPEntity' AND TargetInstance.FriendlyName LIKE '%$($script:friendlyName)%'"
 
-Register-WmiEvent -Query $Query -SourceIdentifier "BTDeviceEvent" -Action {
-    try {
-        Write-Host "[Event Triggered] Checking device connection status..."
+    if (-not $script:friendlyName) {
+        # Ensure device info is loaded
+        DeviceStatus
+        if (-not $script:friendlyName) {
+            throw "Device friendly name is empty. Cannot register WMI event."
+        }
+    }
 
-        if (-not (DeviceStatus)) {
-            Write-Host "$($script:friendlyName) is disconnected. Waiting $($script:firstCheckInterval) seconds..."
-            Start-Sleep $script:firstCheckInterval
-            Write-Host "Starting A2DP service toggle loop..."
+    Register-WmiEvent -Query $Query -SourceIdentifier "BTDeviceEvent" -Action {
+        try {
+            Write-Host "[Event Triggered] Checking device connection status..."
 
-            while (-not (DeviceStatus)) {
-                ToggleA2DPService
-                Start-Sleep $script:toggleInterval
+            if (-not (DeviceStatus)) {
+                Write-Host "$($script:friendlyName) is disconnected. Waiting $($script:firstCheckInterval) seconds..."
+                Start-Sleep $script:firstCheckInterval
+                Write-Host "Starting A2DP service toggle loop..."
+
+                while (-not (DeviceStatus)) {
+                    ToggleA2DPService
+                    Start-Sleep $script:toggleInterval
+                }
+
+                Write-Host "$($script:friendlyName) successfully reconnected."
+            } else {
+                Write-Host "$($script:friendlyName) is connected. Waiting for next event."
             }
 
-            Write-Host "$($script:friendlyName) successfully reconnected."
-        } else {
-            Write-Host "$($script:friendlyName) is connected. Waiting for next event."
+        } catch {
+            LogMessage "Unexpected error in EventHandler: $($_ | Out-String)"
+            Write-Error "Unexpected error in EventHandler: $($_.Exception.Message)"
         }
-
-    } catch {
-        LogMessage "Unexpected error in EventHandler: $($_ | Out-String)"
-        Write-Error "Unexpected error in EventHandler: $($_.Exception.Message)"
     }
 }
 
