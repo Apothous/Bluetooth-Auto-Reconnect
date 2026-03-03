@@ -9,7 +9,7 @@
 #-------------------------------------------------------------------------------------------------------#
 
 # Set the main loop interval
-$script:toggleInterval = 30
+$script:toggleInterval = 60
 
 # Set wait time after first noticing disconnected
 $script:firstCheckInterval = 60
@@ -45,17 +45,11 @@ if (-not ([System.Management.Automation.PSTypeName]'BLUETOOTH_DEVICE_INFO').Type
     public struct BLUETOOTH_DEVICE_INFO {
         public uint dwSize;           // Size of this structure in bytes (required by API)
         public ulong Address;         // Bluetooth address (converted from MAC string)
-        [MarshalAs(UnmanagedType.Bool)]
         public bool fConnected;       // Whether the device is currently connected
     }
 
-    // Provides access to Bluetooth API functions
+    // Provides access to the BluetoothSetServiceState WinAPI function
     public class BtServiceManager {
-        // Query current device info, including connection state
-        [DllImport("bthprops.cpl", CharSet = CharSet.Auto)]
-        public static extern int BluetoothGetDeviceInfo(IntPtr hRadio, ref BLUETOOTH_DEVICE_INFO pbtdi);
-
-        // Enable or disable a specific service (e.g., A2DP)
         [DllImport("bthprops.cpl", CharSet = CharSet.Auto)]
         public static extern uint BluetoothSetServiceState(
             IntPtr hRadio,                          // Not used (set to zero)
@@ -98,19 +92,6 @@ function GetCurrentUser {
 }
 
 #-------------------------------------------------------------------------------------------------------#
-# Function to load device structure and and populate it's fields
-#-------------------------------------------------------------------------------------------------------#
-function BTStructure {
-    # Convert the MAC string to a 64-bit address as required by the Bluetooth API
-    $btAddr = ConvertMacToULong $script:deviceMAC
-
-    $script:info = New-Object "BLUETOOTH_DEVICE_INFO"
-    $script:info.dwSize = 560  # Struct size in bytes
-    $script:info.Address = $btAddr
-    $script:info.fConnected = $false # Connection status isn't required for toggling service here
-}
-
-#-------------------------------------------------------------------------------------------------------#
 # Function to check device status
 #-------------------------------------------------------------------------------------------------------#
 function DeviceStatus {
@@ -134,8 +115,18 @@ function DeviceStatus {
 
         $script:friendlyName = $csvData[0].DeviceName
         $script:deviceMAC = $csvData[0].MACAddress
+        
+        #------------------------------#
+        # Prepare device info structure
+        #------------------------------#
+        # Convert the MAC string to a 64-bit address as required by the Bluetooth API
+        $btAddr = ConvertMacToULong $script:deviceMAC
 
-        BTStructure # Populate the Bluetooth device structure for API calls
+        # Instantiate the Bluetooth device structure and populate its fields
+        $script:info = New-Object "BLUETOOTH_DEVICE_INFO"
+        $script:info.dwSize = 560  # Struct size in bytes
+        $script:info.Address = $btAddr
+        $script:info.fConnected = $false # Connection status isn't required for toggling service here
 
         $script:deviceInfoLoaded = $true
         LogMessage "Device information loaded: Name='$($script:friendlyName)', MAC='$($script:deviceMAC)'."
@@ -151,6 +142,7 @@ function DeviceStatus {
     $foundConnected = $false
     
     GetCurrentUser
+    Write-Host "Checking for audio endpoints matching '$nameToCheck'..."
 
     # Get all audio endpoint devices (connected or not) and guard against failures
     try {
@@ -158,6 +150,7 @@ function DeviceStatus {
     } catch {
         LogMessage "Get-PnpDevice failed: $($_ | Out-String)"
         Write-Error "Failed to enumerate audio endpoints. See log for details."
+        $devices = @() # Use empty array to avoid further errors
     }
 
     # Aggregate matching endpoints first. The device should be considered connected if ANY matching endpoint reports Status='OK'.
@@ -165,7 +158,7 @@ function DeviceStatus {
     foreach ($device in $devices) {
         $friendly = $device.FriendlyName
         $status = $device.Status
-
+        Write-Host "Found audio endpoint: '$friendly' with status '$status'."
         $isMatch = $false
         if ($friendly) {
             if ($friendly -match "\(([^)]+)\)") {
@@ -177,39 +170,29 @@ function DeviceStatus {
         }
 
         if ($isMatch) {
+            #Write-Host "Matched endpoint: '$friendly' with status '$status'."
             $matchedDevices += [PSCustomObject]@{ FriendlyName = $friendly; Status = $status }
         }
     }
 
-    Write-Host "Found $($matchedDevices.Count) matching '$nameToCheck' endpoint(s)"
     if ($matchedDevices.Count -gt 0) {
         $foundAny = $true
         $connectedCount = (@($matchedDevices | Where-Object { $_.Status -eq $statusOK })).Count
         if ($connectedCount -gt 0) {
             $foundConnected = $true
-            Write-Host "Found $connectedCount connected endpoint(s) for device '$nameToCheck'."
-        } else {
-            # PnP says none are connected — try low-level Bluetooth API
-            try {
-                BTStructure # Ensure the Bluetooth device structure is populated for the API call
-
-                $result = [BtServiceManager]::BluetoothGetDeviceInfo([IntPtr]::Zero, [ref]$script:info)
-                if ($result -eq 0 -and $script:info.fConnected) {
-                    $foundConnected = $true
-                    Write-Host "Bluetooth API reports device is connected."
-                } else {
-                    Write-Host "No connected endpoints found, device is disconnected."
-                }
-            } catch {
-                LogMessage "BluetoothGetDeviceInfo failed: $($_ | Out-String)"
+            Write-Host "Found $($matchedDevices.Count) matching '$nameToCheck' endpoint(s); $connectedCount connected."
+            foreach ($endpoint in $matchedDevices) {
+                Write-Host " - '$($endpoint.FriendlyName)' with status '$($endpoint.Status)'"
             }
+        } else {
+            Write-Host "Found $($matchedDevices.Count) matching '$nameToCheck' endpoint(s) but none are connected."
         }
     }
 
-    if ($foundAny -eq $false) { 
-        Write-Host "Found no matching '$nameToCheck' endpoint(s); skipping toggle until device is present." 
+    if ($foundAny -eq $false) {
+        Write-Host "Found no matching '$nameToCheck' endpoint(s); skipping toggle until device is present."
     }
-
+    Write-Host "End Audio Endpoint Check."
     return $foundConnected
 }
 
