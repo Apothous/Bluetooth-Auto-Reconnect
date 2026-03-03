@@ -9,7 +9,7 @@
 #-------------------------------------------------------------------------------------------------------#
 
 # Set the main loop interval
-$script:interval = 30
+$script:toggleInterval = 60
 
 # Set wait time after first noticing disconnected
 $script:firstCheckInterval = 60
@@ -136,11 +136,6 @@ function DeviceStatus {
 
     Write-Host "-------------------------------------------------------------------------"
 
-    $nameToCheck = $script:friendlyName # Use the loaded friendly name
-    $statusOK = "OK"
-    $foundAny = $false
-    $foundConnected = $false
-    
     GetCurrentUser
 
     # Get all audio endpoint devices (connected or not) and guard against failures
@@ -149,14 +144,20 @@ function DeviceStatus {
     } catch {
         LogMessage "Get-PnpDevice failed: $($_ | Out-String)"
         Write-Error "Failed to enumerate audio endpoints. See log for details."
+        $devices = @() # Use empty array to avoid further errors
     }
 
-    # Aggregate matching endpoints first. The device should be considered connected if ANY matching endpoint reports Status='OK'.
+    # Aggregate matching endpoints first.
     $matchedDevices = @()
+
+    $nameToCheck = $script:friendlyName # Use the loaded friendly name
+    Write-Host "Checking for audio endpoints matching '$nameToCheck'..."
+
+    #Write-Host "Found audio endpoint(s):"
     foreach ($device in $devices) {
         $friendly = $device.FriendlyName
         $status = $device.Status
-
+        #Write-Host "$friendly' with status '$status'"
         $isMatch = $false
         if ($friendly) {
             if ($friendly -match "\(([^)]+)\)") {
@@ -168,25 +169,66 @@ function DeviceStatus {
         }
 
         if ($isMatch) {
+            #Write-Host "Matched endpoint: '$friendly' with status '$status'."
             $matchedDevices += [PSCustomObject]@{ FriendlyName = $friendly; Status = $status }
         }
     }
 
     if ($matchedDevices.Count -gt 0) {
-        $foundAny = $true
+        Write-Host "Found $($matchedDevices.Count) matching '$nameToCheck' endpoint(s)."
+        foreach ($endpoint in $matchedDevices) {
+                Write-Host " - $($endpoint.FriendlyName)"
+        }
+
+        $statusOK = "OK"
+        $statusDisconnected = "Disconnected"
+        $statusError = "Error"
+        $statusUnknown = "Unknown"
+
         $connectedCount = (@($matchedDevices | Where-Object { $_.Status -eq $statusOK })).Count
+        $disconnectedCount = (@($matchedDevices | Where-Object { $_.Status -eq $statusDisconnected })).Count
+        $errorCount = (@($matchedDevices | Where-Object { $_.Status -eq $statusError })).Count
+        $unknownCount = (@($matchedDevices | Where-Object { $_.Status -eq $statusUnknown })).Count
+
+        $foundConnected = $false
         if ($connectedCount -gt 0) {
             $foundConnected = $true
-            Write-Host "Found $($matchedDevices.Count) matching '$nameToCheck' endpoint(s); $connectedCount connected."
-        } else {
-            Write-Host "Found $($matchedDevices.Count) matching '$nameToCheck' endpoint(s) but none are connected."
+            Write-Host ""
+            Write-Host "$connectedCount matching '$nameToCheck' endpoint(s) are connected."
+            foreach ($endpoint in $matchedDevices | Where-Object { $_.Status -eq $statusOK }) {
+                Write-Host " - $($endpoint.FriendlyName) status '$($endpoint.Status)'"
+            }
         }
-    }
-
-    if ($foundAny -eq $false) {
+        
+        if ($disconnectedCount -gt 0) {
+            Write-Host ""
+            Write-Host "$disconnectedCount matching '$nameToCheck' endpoint(s) are disconnected."
+            foreach ($endpoint in $matchedDevices | Where-Object { $_.Status -eq $statusDisconnected }) {
+                Write-Host " - $($endpoint.FriendlyName) status '$($endpoint.Status)'"
+            }
+        } 
+        
+        if ($errorCount -gt 0) {
+            Write-Host ""
+            Write-Host "$errorCount matching '$nameToCheck' endpoint(s) encountered an error."
+            foreach ($endpoint in $matchedDevices | Where-Object { $_.Status -eq $statusError }) {
+                Write-Host " - $($endpoint.FriendlyName) status '$($endpoint.Status)'"
+            }
+        } 
+        
+        if ($unknownCount -gt 0) {
+            Write-Host ""
+            Write-Host "$unknownCount matching '$nameToCheck' endpoint(s) have an unknown status."
+            foreach ($endpoint in $matchedDevices | Where-Object { $_.Status -eq $statusUnknown }) {
+                Write-Host " - $($endpoint.FriendlyName) status '$($endpoint.Status)'"
+            }
+        }
+    } else {
         Write-Host "Found no matching '$nameToCheck' endpoint(s); skipping toggle until device is present."
     }
 
+    #Write-Host "End Audio Endpoint Check."
+    Write-Host ""
     return $foundConnected
 }
 
@@ -229,5 +271,5 @@ while ($true) {
         LogMessage "DeviceStatus returned unexpected value: $connected"
     }
 
-    Start-Sleep $script:interval
+    Start-Sleep $script:toggleInterval
 }
