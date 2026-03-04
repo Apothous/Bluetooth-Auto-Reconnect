@@ -92,6 +92,18 @@ if (-not ([System.Management.Automation.PSTypeName]'BLUETOOTH_DEVICE_INFO').Type
 function LogMessage {
     param([string]$message)
     $timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+    
+    # Log Rotation: Check if file exists and is larger than 1MB
+    if (Test-Path $script:logFile) {
+        if ((Get-Item $script:logFile).Length -gt 1MB) {
+            try {
+                Move-Item -Path $script:logFile -Destination "$script:logFile.bak" -Force -ErrorAction Stop
+            } catch {
+                Write-Warning "Log rotation failed: $($_.Exception.Message)"
+            }
+        }
+    }
+
     "$timestamp - $message" | Out-File -Append $script:logFile
 }
 
@@ -99,22 +111,24 @@ function LogMessage {
 # Function to load device information from the CSV file
 #-------------------------------------------------------------------------------------------------------#
 function LoadDeviceInfo {
-    LogMessage "Attempting to load device information from $script:deviceFile..."
+    Write-Host "Attempting to load device information from $script:deviceFile..."
     
     # Load device configuration
     if (-not (Test-Path $script:deviceFile)) {
-        $msg = "Device data file not found. Please run SetupScript.ps1 first to create it."
-        Write-Error $msg
+        $msg = "Device data file not found at '$script:deviceFile'. Please run SetupScript.ps1 first to create it."
         LogMessage $msg
-        throw $msg # Terminate script if config file is missing
+        Write-Error $msg
+        Start-Sleep 5
+        exit
     }
 
     $csvData = Import-Csv -Path $script:deviceFile
     if (-not $csvData -or $csvData.Count -eq 0) {
         $msg = "No device data found in $script:deviceFile or the file is empty. Please run SetupScript.ps1."
-        Write-Error $msg
         LogMessage $msg
-        throw $msg # Terminate script if config file is empty
+        Write-Error $msg
+        Start-Sleep 5
+        exit
     }
 
     $script:friendlyName = $csvData[0].DeviceName
@@ -142,7 +156,8 @@ function DeviceStatus {
         $msg = "Invalid MAC address format in CSV: '$script:deviceMAC'. Please re-run SetupScript.ps1."
         LogMessage $msg
         Write-Error $msg
-        throw $msg
+        Start-Sleep 5
+        exit
     }
 
     # Instantiate the Bluetooth device structure and populate its fields
@@ -158,7 +173,6 @@ function DeviceStatus {
     try {
         $deviceStatus = [BtServiceManager]::BluetoothGetDeviceInfo([IntPtr]::Zero, [ref]$script:info)
     } catch {
-        LogMessage "Error calling BluetoothGetDeviceInfo: $($_.Exception.Message)"
         Write-Host "Error calling Bluetooth API. Assuming $script:friendlyName is disconnected."
         return $false
     }
@@ -166,10 +180,11 @@ function DeviceStatus {
     if ($deviceStatus -eq 0) {
         # Safety Switch: Check if the device is still paired (Remembered)
         if ($script:info.fRemembered -eq 0) {
-            $msg = "FATAL: Device '$script:friendlyName' is no longer paired (Remembered). Stopping script."
+            $msg = "Device '$script:friendlyName' is no longer paired. Stopping script."
             LogMessage $msg
             Write-Error $msg
-            exit # Terminate the script entirely to prevent log spam
+            Start-Sleep 5
+            exit
         }
 
         if ($script:info.fConnected -ne 0) {
@@ -206,9 +221,10 @@ function ToggleA2DPService {
         
         Write-Host "A2DP service toggled successfully."
     } catch {
-        # Capture and log any errors that occur during the toggle process
         LogMessage "Error occurred while toggling A2DP service: $($_ | Out-String)"
-        Write-Error "An error occurred while toggling A2DP service. See log for details."
+        Write-Error "An error occurred while toggling A2DP service. Stopping script. See log for details."
+        Start-Sleep 5
+        exit
     }
 }
 
@@ -230,8 +246,10 @@ while ($true) {
             ToggleA2DPService
         }
     } catch {
-        LogMessage "Unexpected error in main loop: $($_.Exception.Message)"
-        Write-Host "An unexpected error occurred. Retrying in $script:toggleInterval seconds."
+        LogMessage "Unexpected error in main loop: $($_ | Out-String)"
+        Write-Host "An unexpected error occurred. Stopping script. See log for details."
+        Start-Sleep 5
+        exit
     }
 
     Start-Sleep $script:toggleInterval
