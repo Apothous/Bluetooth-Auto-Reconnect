@@ -40,22 +40,47 @@ if (-not ([System.Management.Automation.PSTypeName]'BLUETOOTH_DEVICE_INFO').Type
     using System;
     using System.Runtime.InteropServices;
 
-    // This structure represents a Bluetooth device's key info
     [StructLayout(LayoutKind.Sequential)]
+    public struct SYSTEMTIME {
+        public ushort wYear;
+        public ushort wMonth;
+        public ushort wDayOfWeek;
+        public ushort wDay;
+        public ushort wHour;
+        public ushort wMinute;
+        public ushort wSecond;
+        public ushort wMilliseconds;
+    }
+
+    // This structure represents a Bluetooth device's key info
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     public struct BLUETOOTH_DEVICE_INFO {
         public uint dwSize;           // Size of this structure in bytes (required by API)
         public ulong Address;         // Bluetooth address (converted from MAC string)
+        public uint ulClassofDevice; // Device class (not used here, but required for struct)
         public bool fConnected;       // Whether the device is currently connected
+        public bool fRemembered;      // Whether the device is remembered (paired)
+        public bool fAuthenticated;   // Whether the device is authenticated (paired)
+        public SYSTEMTIME stLastSeen; // Last time the device was seen (not used here)
+        public SYSTEMTIME stLastUsed; // Last time the device was used (not used here)
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 248)]
+        public string szName;        // Device name (not used here, but required for struct)
     }
 
     // Provides access to the BluetoothSetServiceState WinAPI function
     public class BtServiceManager {
-        [DllImport("bthprops.cpl", CharSet = CharSet.Auto)]
+        [DllImport("bthprops.cpl", CharSet = CharSet.Auto, SetLastError = true)]
         public static extern uint BluetoothSetServiceState(
             IntPtr hRadio,                          // Not used (set to zero)
             ref BLUETOOTH_DEVICE_INFO deviceInfo,   // Info struct for target device
             ref Guid guidService,                   // Service GUID (e.g., A2DP)
             uint dwServiceFlags                     // 0 = disable, 1 = enable
+        );
+
+        [DllImport("bthprops.cpl", CharSet = CharSet.Auto, SetLastError = true)]
+        public static extern uint BluetoothGetDeviceInfo(
+            IntPtr hRadio,                          // Not used (set to zero)
+            ref BLUETOOTH_DEVICE_INFO pbtdi    // Info struct for target device
         );
     }
 "@ -Language CSharp
@@ -76,19 +101,6 @@ function LogMessage {
 function ConvertMacToULong {
     param($mac)
     return [Convert]::ToUInt64($mac, 16)
-}
-
-#-------------------------------------------------------------------------------------------------------#
-# Function to log current user/session for diagnostics
-#-------------------------------------------------------------------------------------------------------#
-function GetCurrentUser {
-    try {
-        $currentIdentity = [Security.Principal.WindowsIdentity]::GetCurrent().Name
-    } catch {
-        $currentIdentity = $env:USERNAME
-    }
-    #LogMessage "Running DeviceStatus as user '$currentIdentity'."
-    Write-Host "Running DeviceStatus as user '$currentIdentity'."
 }
 
 #-------------------------------------------------------------------------------------------------------#
@@ -126,110 +138,32 @@ function DeviceStatus {
         $script:info = New-Object "BLUETOOTH_DEVICE_INFO"
         $script:info.dwSize = 560  # Struct size in bytes
         $script:info.Address = $btAddr
-        $script:info.fConnected = $false # Connection status isn't required for toggling service here
 
         $script:deviceInfoLoaded = $true
-        LogMessage "Device information loaded: Name='$($script:friendlyName)', MAC='$($script:deviceMAC)'."
         Write-Host "-------------------------------------------------------------------------"
         Write-Host "Device information loaded: Name='$($script:friendlyName)', MAC='$($script:deviceMAC)'."
     }
 
     Write-Host "-------------------------------------------------------------------------"
 
-    GetCurrentUser
+    # Use Bluetooth API to check connection status
+    Write-Host "Checking Bluetooth connection status for $script:friendlyName..."
+    $deviceStatus = [BtServiceManager]::BluetoothGetDeviceInfo([IntPtr]::Zero, [ref]$script:info)
 
-    # Get all audio endpoint devices (connected or not) and guard against failures
-    try {
-        $devices = Get-PnpDevice -Class AudioEndpoint -ErrorAction Stop
-    } catch {
-        LogMessage "Get-PnpDevice failed: $($_ | Out-String)"
-        Write-Error "Failed to enumerate audio endpoints. See log for details."
-        $devices = @() # Use empty array to avoid further errors
-    }
-
-    # Aggregate matching endpoints first.
-    $matchedDevices = @()
-
-    $nameToCheck = $script:friendlyName # Use the loaded friendly name
-    Write-Host "Checking for audio endpoints matching '$nameToCheck'..."
-
-    #Write-Host "Found audio endpoint(s):"
-    foreach ($device in $devices) {
-        $friendly = $device.FriendlyName
-        $status = $device.Status
-        #Write-Host "$friendly' with status '$status'"
-        $isMatch = $false
-        if ($friendly) {
-            if ($friendly -match "\(([^)]+)\)") {
-                $nameInParens = $matches[1] -replace '\s+(Stereo|Hands-Free|Headset|AG Audio)$', ''
-                if ($nameInParens -eq $nameToCheck) { $isMatch = $true }
-            }
-            # Fallback substring match if parenthesized form isn't present
-            if (-not $isMatch -and ($friendly -like "*$nameToCheck*")) { $isMatch = $true }
+    if ($deviceStatus -eq 0) {
+        if ($script:info.fConnected -ne 0) {
+            $isConnected = $true
+            Write-Host "$script:friendlyName Status: Connected"
+        } else {
+            $isConnected = $false
+            Write-Host "$script:friendlyName Status: Disconnected"
         }
-
-        if ($isMatch) {
-            #Write-Host "Matched endpoint: '$friendly' with status '$status'."
-            $matchedDevices += [PSCustomObject]@{ FriendlyName = $friendly; Status = $status }
-        }
-    }
-
-    if ($matchedDevices.Count -gt 0) {
-        Write-Host "Found $($matchedDevices.Count) matching '$nameToCheck' endpoint(s)."
-        foreach ($endpoint in $matchedDevices) {
-                Write-Host " - $($endpoint.FriendlyName)"
-        }
-
-        $statusOK = "OK"
-        $statusDisconnected = "Disconnected"
-        $statusError = "Error"
-        $statusUnknown = "Unknown"
-
-        $connectedCount = (@($matchedDevices | Where-Object { $_.Status -eq $statusOK })).Count
-        $disconnectedCount = (@($matchedDevices | Where-Object { $_.Status -eq $statusDisconnected })).Count
-        $errorCount = (@($matchedDevices | Where-Object { $_.Status -eq $statusError })).Count
-        $unknownCount = (@($matchedDevices | Where-Object { $_.Status -eq $statusUnknown })).Count
-
-        $foundConnected = $false
-        if ($connectedCount -gt 0) {
-            $foundConnected = $true
-            Write-Host ""
-            Write-Host "$connectedCount matching '$nameToCheck' endpoint(s) are connected."
-            foreach ($endpoint in $matchedDevices | Where-Object { $_.Status -eq $statusOK }) {
-                Write-Host " - $($endpoint.FriendlyName) status '$($endpoint.Status)'"
-            }
-        }
-        
-        if ($disconnectedCount -gt 0) {
-            Write-Host ""
-            Write-Host "$disconnectedCount matching '$nameToCheck' endpoint(s) are disconnected."
-            foreach ($endpoint in $matchedDevices | Where-Object { $_.Status -eq $statusDisconnected }) {
-                Write-Host " - $($endpoint.FriendlyName) status '$($endpoint.Status)'"
-            }
-        } 
-        
-        if ($errorCount -gt 0) {
-            Write-Host ""
-            Write-Host "$errorCount matching '$nameToCheck' endpoint(s) encountered an error."
-            foreach ($endpoint in $matchedDevices | Where-Object { $_.Status -eq $statusError }) {
-                Write-Host " - $($endpoint.FriendlyName) status '$($endpoint.Status)'"
-            }
-        } 
-        
-        if ($unknownCount -gt 0) {
-            Write-Host ""
-            Write-Host "$unknownCount matching '$nameToCheck' endpoint(s) have an unknown status."
-            foreach ($endpoint in $matchedDevices | Where-Object { $_.Status -eq $statusUnknown }) {
-                Write-Host " - $($endpoint.FriendlyName) status '$($endpoint.Status)'"
-            }
-        }
+        return $isConnected
     } else {
-        Write-Host "Found no matching '$nameToCheck' endpoint(s); skipping toggle until device is present."
+        Write-Host "BluetoothGetDeviceInfo returned error code: $deviceStatus."
+        Write-Host "Assuming $script:friendlyName is disconnected."
+        return $false
     }
-
-    #Write-Host "End Audio Endpoint Check."
-    Write-Host ""
-    return $foundConnected
 }
 
 #-------------------------------------------------------------------------------------------------------#
@@ -256,19 +190,15 @@ function ToggleA2DPService {
 
 while ($true) {
     $connected = DeviceStatus
-    if ($connected -eq $true) {
-        if ($script:firstCheck -eq $false) { $script:firstCheck = $true }
-    } elseif ($connected -eq $false -and $script:firstCheck -eq $true) {
+    if ($connected) {
+        $script:firstCheck = $true
+    } elseif ($script:firstCheck) {
         $script:firstCheck = $false
         Write-Host "Waiting $script:firstCheckInterval seconds before attempting to reconnect."
         Start-Sleep $script:firstCheckInterval
-    } elseif ($connected -eq $false -and $script:firstCheck -eq $false) {
+    } else {
         Write-Host "Device is still disconnected; attempting to toggle A2DP service..."
         ToggleA2DPService
-    } else {
-        # If DeviceStatus returned something unexpected, skip and retry later
-        Write-Host "DeviceStatus returned unexpected value; retrying later."
-        LogMessage "DeviceStatus returned unexpected value: $connected"
     }
 
     Start-Sleep $script:toggleInterval
