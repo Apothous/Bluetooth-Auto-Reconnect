@@ -1,7 +1,7 @@
 ﻿#-------------------------------------------------------------------------------------------------------#
 # Script 2: Toggle Audio Service to connect PC to the Bluetooth Device
 # Description:
-#     This script disables and re-enables the A2DP (audio) service for a specific Bluetooth device.
+# This script disables and re-enables the A2DP (audio) service for a specific Bluetooth device.
 #-------------------------------------------------------------------------------------------------------#
 
 #-------------------------------------------------------------------------------------------------------#
@@ -52,6 +52,11 @@ if (-not ([System.Management.Automation.PSTypeName]'BLUETOOTH_DEVICE_INFO').Type
         public ushort wMilliseconds;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    public struct BLUETOOTH_FIND_RADIO_PARAMS {
+        public uint dwSize;
+    }
+
     // This structure represents a Bluetooth device's key info
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     public struct BLUETOOTH_DEVICE_INFO {
@@ -72,7 +77,7 @@ if (-not ([System.Management.Automation.PSTypeName]'BLUETOOTH_DEVICE_INFO').Type
         [DllImport("bthprops.cpl", CharSet = CharSet.Auto, SetLastError = true)]
         public static extern uint BluetoothSetServiceState(
             IntPtr hRadio,                          // Not used (set to zero)
-            ref BLUETOOTH_DEVICE_INFO deviceInfo,   // Info struct for target device
+            ref BLUETOOTH_DEVICE_INFO setDeviceInfo,   // Info struct for target device
             ref Guid guidService,                   // Service GUID (e.g., A2DP)
             uint dwServiceFlags                     // 0 = disable, 1 = enable
         );
@@ -80,8 +85,20 @@ if (-not ([System.Management.Automation.PSTypeName]'BLUETOOTH_DEVICE_INFO').Type
         [DllImport("bthprops.cpl", CharSet = CharSet.Auto, SetLastError = true)]
         public static extern uint BluetoothGetDeviceInfo(
             IntPtr hRadio,                          // Not used (set to zero)
-            ref BLUETOOTH_DEVICE_INFO pbtdi    // Info struct for target device
+            ref BLUETOOTH_DEVICE_INFO getDeviceInfo    // Info struct for target device
         );
+
+        [DllImport("bthprops.cpl", SetLastError = true)]
+        public static extern IntPtr BluetoothFindFirstRadio(
+            ref BLUETOOTH_FIND_RADIO_PARAMS pbtfrp, 
+            out IntPtr phRadio
+        );
+
+        [DllImport("bthprops.cpl", SetLastError = true)]
+        public static extern bool BluetoothFindRadioClose(IntPtr hFind);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool CloseHandle(IntPtr hObject);
     }
 "@ -Language CSharp
 }
@@ -136,6 +153,24 @@ function LoadDeviceInfo {
 
     Write-Host "-------------------------------------------------------------------------"
     Write-Host "Device information loaded: Name='$($script:friendlyName)', MAC='$($script:deviceMAC)'."
+}
+
+#-------------------------------------------------------------------------------------------------------#
+# Function to check if local Bluetooth Radio is active
+#-------------------------------------------------------------------------------------------------------#
+function TestLocalBluetoothRadio {
+    $params = New-Object BLUETOOTH_FIND_RADIO_PARAMS
+    $params.dwSize = 4 
+    $hRadio = [IntPtr]::Zero
+    
+    $hFind = [BtServiceManager]::BluetoothFindFirstRadio([ref]$params, [ref]$hRadio)
+    
+    if ($hFind -ne [IntPtr]::Zero) {
+        [BtServiceManager]::BluetoothFindRadioClose($hFind) | Out-Null
+        [BtServiceManager]::CloseHandle($hRadio) | Out-Null
+        return $true
+    }
+    return $false
 }
 
 #-------------------------------------------------------------------------------------------------------#
@@ -234,16 +269,21 @@ function ToggleA2DPService {
 LoadDeviceInfo
 while ($true) {
     try {
-        $connected = DeviceStatus
-        if ($connected -eq $true -and $script:firstCheck -eq $false) {
-            $script:firstCheck = $true
-        } elseif ($connected -eq $false -and $script:firstCheck -eq $true) {
-            $script:firstCheck = $false
-            Write-Host "Waiting $script:firstCheckInterval seconds before attempting to reconnect."
-            Start-Sleep $script:firstCheckInterval
-        } elseif ($connected -eq $false -and $script:firstCheck -eq $false) {
-            Write-Host "Device is still disconnected. Attempting to toggle A2DP service..."
-            ToggleA2DPService
+        if (TestLocalBluetoothRadio) {
+            $connected = DeviceStatus
+            if ($connected -eq $true -and $script:firstCheck -eq $false) {
+                $script:firstCheck = $true
+            } elseif ($connected -eq $false -and $script:firstCheck -eq $true) {
+                $script:firstCheck = $false
+                Write-Host "Waiting $script:firstCheckInterval seconds before attempting to reconnect."
+                Start-Sleep $script:firstCheckInterval
+            } elseif ($connected -eq $false -and $script:firstCheck -eq $false) {
+                Write-Host "Device is still disconnected. Attempting to toggle A2DP service..."
+                ToggleA2DPService
+            }
+        } else {
+            Write-Host "-------------------------------------------------------------------------"
+            Write-Warning "No active Bluetooth radio detected."
         }
     } catch {
         LogMessage "Unexpected error in main loop: $($_ | Out-String)"
